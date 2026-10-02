@@ -1,1 +1,45 @@
+name: Günlük video
 
+on:
+  schedule:
+    - cron: "0 15 * * *"      # her gün 15:00 UTC = Türkiye saatiyle 18:00
+  workflow_dispatch:
+    inputs:
+      gun:
+        description: "Test için gün numarası (boş bırakırsan otomatik seçilir)"
+        required: false
+      gizlilik:
+        description: "public / unlisted / private"
+        default: "private"
+
+jobs:
+  video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Gerekli programlar
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          pip install -r requirements.txt
+      - name: Videoyu üret
+        run: |
+          if [ -n "${{ github.event.inputs.gun }}" ]; then
+            python make_video.py --day "${{ github.event.inputs.gun }}" --out video.mp4 --meta meta.json
+          else
+            python make_video.py --auto --out video.mp4 --meta meta.json
+          fi
+      - name: YouTube'a yükle
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          PRIVACY: ${{ github.event.inputs.gizlilik || 'public' }}
+        run: python upload.py video.mp4 meta.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: video
+          path: video.mp4
